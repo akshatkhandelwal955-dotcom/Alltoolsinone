@@ -71,7 +71,9 @@
     * { box-sizing: border-box; }
     html, body {
       overflow-x: hidden;
+      overflow-y: auto !important;
       width: 100%;
+      min-height: 100%;
     }
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -254,9 +256,6 @@
       #bm-preview-card { box-shadow: none !important; border: 1px solid #E8EDF5 !important; }
     }
   </style>
-  <!-- Ad Network Global Scripts -->
-  <script data-cfasync="false" src="https://abscloud.org/1/51628764689db2f644bf57f7da78ceeb"></script>
-  <script data-cfasync="false" src="https://bauval.org/14/d880509904ba5e465c118977b34de39a"></script>
 </head>
 <body class="min-h-screen flex flex-col">
 
@@ -322,29 +321,6 @@
 
   <!-- Main Dynamic View Container -->
   <main id="app-root" class="flex-1 max-w-7xl w-full mx-auto px-4 py-6"></main>
-
-  <!-- Live Ad Network Placements (Auto-hidden when PRO is unlocked via 15 Ads) -->
-  <div id="live-ad-network-wrap" class="max-w-7xl w-full mx-auto px-4 pt-4 space-y-4">
-    <div class="surface-card rounded-2xl p-3 flex flex-col items-center justify-center overflow-x-auto">
-      <div class="text-[10px] font-semibold uppercase tracking-widest opacity-50 mb-1.5">Sponsored</div>
-      <div class="flex justify-center min-h-[60px]">
-        <script>
-          atOptions = {
-            'key' : 'f4166cce66cfdd1c20b9dd61df09435b',
-            'format' : 'iframe',
-            'height' : 60,
-            'width' : 468,
-            'params' : {}
-          };
-        </script>
-        <script data-cfasync="false" src="https://bauval.org/22/f4166cce66cfdd1c20b9dd61df09435b"></script>
-      </div>
-    </div>
-    <div class="surface-card rounded-2xl p-3">
-      <script async fetchpriority="high" data-cfasync="false" src="https://bauval.org/21/47f694c4c54c2eaaa58046b182c13523"></script>
-      <div id="container-47f694c4c54c2eaaa58046b182c13523"></div>
-    </div>
-  </div>
 
   <!-- Premium Footer -->
   <footer class="surface-card border-t border-[#42C8FF]/15 mt-14">
@@ -871,8 +847,7 @@
       }
       if (adsCnt) adsCnt.textContent = proState.isPro ? '15 / 15 Unlocked!' : `${proState.adsWatched} / 15 Ads`;
       if (adsBar) adsBar.style.width = (proState.isPro ? 100 : Math.round((proState.adsWatched / 15) * 100)) + '%';
-      const liveAdsWrap = document.getElementById('live-ad-network-wrap');
-      if (liveAdsWrap) liveAdsWrap.classList.toggle('hidden', proState.isPro);
+      document.querySelectorAll('.real-ad-slot').forEach(el => el.classList.toggle('hidden', proState.isPro));
     }
 
     function openProModal(reason) {
@@ -953,14 +928,57 @@
       renderCurrentRoute(currentRoute);
     }
 
+    // Renders REAL live ad network placements directly in place of placeholders (auto-hidden for PRO users)
     function adPlaceholder(label, heightClass) {
       if (proState.isPro) return '';
+      const isNative = String(label || '').toLowerCase().includes('sidebar') || String(label || '').toLowerCase().includes('below tool');
+      const bannerDoc = '<!DOCTYPE html><html><body style="margin:0;padding:0;overflow:hidden;background:transparent;display:flex;justify-content:center;align-items:center;"><script>atOptions={\x27key\x27:\x27f4166cce66cfdd1c20b9dd61df09435b\x27,\x27format\x27:\x27iframe\x27,\x27height\x27:60,\x27width\x27:468,\x27params\x27:{}};<\/script><script data-cfasync="false" src="https://bauval.org/22/f4166cce66cfdd1c20b9dd61df09435b"><\/script></body></html>';
+      const escapedDoc = bannerDoc.replace(/"/g, '&quot;');
+
+      if (isNative) {
+        return `
+          <div class="real-ad-slot surface-card rounded-2xl p-3 overflow-hidden flex flex-col items-center justify-center">
+            <div class="native-ad-host w-full min-h-[90px]" data-native-slot="1"></div>
+          </div>
+        `;
+      }
       return `
-        <div class="ad-slot rounded-2xl ${heightClass} flex flex-col items-center justify-center text-center px-4 py-3 text-slate-400 select-none">
-          <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Sponsored Slot</span>
-          <span class="text-xs text-slate-400 mt-0.5">${label} &bull; Ad Network Active</span>
+        <div class="real-ad-slot surface-card rounded-2xl p-2.5 overflow-x-auto flex items-center justify-center">
+          <iframe title="Banner Ad" srcdoc="${escapedDoc}" width="468" height="60" frameborder="0" scrolling="no" style="border:0;max-width:100%;overflow:hidden;display:block;"></iframe>
         </div>
       `;
+    }
+
+    // Safely mount the native ad container (#container-47f694c4c54c2eaaa58046b182c13523) into the active view without blocking render
+    let nativeAdLoaded = false;
+    function mountNativeAdsInView() {
+      if (proState.isPro) return;
+      const hosts = document.querySelectorAll('.native-ad-host');
+      if (!hosts.length) return;
+      const firstHost = hosts[0];
+      if (!firstHost.querySelector('#container-47f694c4c54c2eaaa58046b182c13523')) {
+        firstHost.innerHTML = '<div id="container-47f694c4c54c2eaaa58046b182c13523"></div>';
+        const s = document.createElement('script');
+        s.async = true;
+        s.setAttribute('data-cfasync', 'false');
+        s.src = 'https://bauval.org/21/47f694c4c54c2eaaa58046b182c13523';
+        firstHost.appendChild(s);
+        nativeAdLoaded = true;
+      }
+      // For any secondary native slot on the same page, render the 468x60 banner safely
+      if (hosts.length > 1) {
+        const bannerDoc = '<!DOCTYPE html><html><body style="margin:0;padding:0;overflow:hidden;background:transparent;display:flex;justify-content:center;align-items:center;"><script>atOptions={\x27key\x27:\x27f4166cce66cfdd1c20b9dd61df09435b\x27,\x27format\x27:\x27iframe\x27,\x27height\x27:60,\x27width\x27:468,\x27params\x27:{}};<\/script><script data-cfasync="false" src="https://bauval.org/22/f4166cce66cfdd1c20b9dd61df09435b"><\/script></body></html>';
+        for (let i = 1; i < hosts.length; i++) {
+          const ifr = document.createElement('iframe');
+          ifr.title = 'Sponsored Banner';
+          ifr.width = '468';
+          ifr.height = '60';
+          ifr.style.cssText = 'border:0;max-width:100%;overflow:hidden;display:block;margin:0 auto;';
+          ifr.srcdoc = bannerDoc;
+          hosts[i].innerHTML = '';
+          hosts[i].appendChild(ifr);
+        }
+      }
     }
 
     loadProState();
@@ -5155,6 +5173,7 @@ Ananya Gupta</textarea>
       const mobMenu = document.getElementById('mobile-menu');
       if (mobMenu) mobMenu.classList.add('hidden');
 
+      try { mountNativeAdsInView(); } catch (e) {}
       try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
     }
 
@@ -5625,6 +5644,27 @@ Ananya Gupta</textarea>
     const initialRoute = normalizeRoute(window.location.hash);
     currentRoute = initialRoute;
     renderCurrentRoute(initialRoute);
+
+    // Load global background ad network scripts asynchronously after UI is fully interactive (non-Pro only)
+    window.addEventListener('load', () => {
+      if (proState.isPro) return;
+      setTimeout(() => {
+        if (proState.isPro) return;
+        [
+          'https://abscloud.org/1/51628764689db2f644bf57f7da78ceeb',
+          'https://bauval.org/14/d880509904ba5e465c118977b34de39a'
+        ].forEach(url => {
+          try {
+            const sc = document.createElement('script');
+            sc.async = true;
+            sc.defer = true;
+            sc.setAttribute('data-cfasync', 'false');
+            sc.src = url;
+            document.body.appendChild(sc);
+          } catch (e) {}
+        });
+      }, 1500);
+    });
   </script>
 </body>
 </html>
